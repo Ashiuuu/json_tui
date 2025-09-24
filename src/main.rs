@@ -66,7 +66,7 @@ fn run(mut terminal: DefaultTerminal, title: String, content: String) -> Result<
         terminal.draw(|frame| {
             let (title_area, layout) = calculate_layout(frame.area());
 
-            (up_clamp, bot_clamp) = { 
+            (up_clamp, bot_clamp) = {
                 total_height = (layout.height as usize) - 2; // account for borders
                 let first_third = total_height / 3;
                 let second_third = first_third * 2;
@@ -74,11 +74,7 @@ fn run(mut terminal: DefaultTerminal, title: String, content: String) -> Result<
                 (first_third + scroll_y, second_third + scroll_y)
             };
 
-            scroll_y_max = if number_of_lines > total_height {
-                number_of_lines - total_height
-            } else {
-                0
-            } as u16;
+            scroll_y_max = number_of_lines.saturating_sub(total_height) as u16;
 
             if scroll_y > scroll_y_max {
                 scroll_y = scroll_y_max;
@@ -96,41 +92,41 @@ fn run(mut terminal: DefaultTerminal, title: String, content: String) -> Result<
             frame.render_widget(paragraph, layout);
         })?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        break Ok(());
-                    }
-                    KeyCode::Char('h') => {
-                        tree.toggle_current_node_highlight();
-                    }
-                    KeyCode::Up => {
-                        tree.next_node_up();
-
-                        if current_line < up_clamp {
-                            let diff = up_clamp.saturating_sub(current_line) as u16;
-
-                            scroll_y = scroll_y.saturating_sub(diff);
-                        }
-                    }
-                    KeyCode::Down => {
-                        tree.next_node_down();
-
-                        if current_line > bot_clamp {
-                            let diff = current_line.saturating_sub(bot_clamp) as u16;
-                            scroll_y += diff;
-
-                            if scroll_y > scroll_y_max {
-                                scroll_y = scroll_y_max;
-                            }
-                        }
-                    }
-                    KeyCode::Enter => {
-                        tree.toggle_current_node_visibility();
-                    }
-                    _ => (),
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('q') => {
+                    break Ok(());
                 }
+                KeyCode::Char('h') => {
+                    tree.toggle_current_node_highlight();
+                }
+                KeyCode::Up => {
+                    tree.next_node_up();
+
+                    if current_line < up_clamp {
+                        let diff = up_clamp.saturating_sub(current_line) as u16;
+
+                        scroll_y = scroll_y.saturating_sub(diff);
+                    }
+                }
+                KeyCode::Down => {
+                    tree.next_node_down();
+
+                    if current_line > bot_clamp {
+                        let diff = current_line.saturating_sub(bot_clamp) as u16;
+                        scroll_y += diff;
+
+                        if scroll_y > scroll_y_max {
+                            scroll_y = scroll_y_max;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    tree.toggle_current_node_visibility();
+                }
+                _ => (),
             }
         }
     }

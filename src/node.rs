@@ -10,7 +10,6 @@ pub struct Tree {
     root: DefaultKey,
     slot_map: SlotMap<DefaultKey, Node>,
     current_node: DefaultKey,
-    current_line: usize,
 }
 
 #[derive(Debug)]
@@ -84,19 +83,18 @@ impl NonTerminalNode {
             Self::Array(array) => array
                 .iter()
                 .position(|k| *k == key)
-                .map(|i| {
+                .and_then(|i| {
                     if i < (array.len() - 1) {
                         array.get(i + 1)
                     } else {
                         None
                     }
                 })
-                .flatten()
                 .copied(),
             Self::Object(obj) => obj
                 .iter()
                 .position(|(_, k)| *k == key)
-                .map(|i| {
+                .and_then(|i| {
                     if i < (obj.len() - 1) {
                         let o = obj.get(i + 1);
                         let (_, k) = o.unwrap();
@@ -105,7 +103,6 @@ impl NonTerminalNode {
                         None
                     }
                 })
-                .flatten()
                 .copied(),
         }
     }
@@ -115,13 +112,13 @@ impl NonTerminalNode {
             Self::Array(array) => array
                 .iter()
                 .position(|k| *k == key)
-                .map(|i| if i > 0 { array.get(i - 1) } else { None })
-                .flatten()
+                //.and_then(|i| i > 0 { array.get(i - 1) } else { None })
+                .and_then(|i| if i > 0 { array.get(i - 1) } else { None })
                 .copied(),
             Self::Object(obj) => obj
                 .iter()
                 .position(|(_, k)| *k == key)
-                .map(|i| {
+                .and_then(|i| {
                     if i > 0 {
                         let o = obj.get(i - 1);
                         let (_, k) = o.unwrap();
@@ -130,7 +127,6 @@ impl NonTerminalNode {
                         None
                     }
                 })
-                .flatten()
                 .copied(),
         }
     }
@@ -164,13 +160,11 @@ impl Tree {
 
                     let next_key = current_node
                         .parent
-                        .map(|k| self.slot_map.get(k))
-                        .flatten()
-                        .map(|n| match &n.node {
+                        .and_then(|k| self.slot_map.get(k))
+                        .and_then(|n| match &n.node {
                             NodeType::NonTerminal(v) => v.node.find_next_key(current_key),
                             NodeType::Terminal(_) => unreachable!(),
-                        })
-                        .flatten();
+                        });
 
                     if next_key.is_some() {
                         break next_key;
@@ -190,13 +184,11 @@ impl Tree {
 
                     let next_key = current_node
                         .parent
-                        .map(|k| self.slot_map.get(k))
-                        .flatten()
-                        .map(|n| match &n.node {
+                        .and_then(|k| self.slot_map.get(k))
+                        .and_then(|n| match &n.node {
                             NodeType::NonTerminal(v) => v.node.find_next_key(current_key),
                             NodeType::Terminal(_) => unreachable!(),
-                        })
-                        .flatten();
+                        });
 
                     if next_key.is_some() {
                         break next_key;
@@ -209,9 +201,9 @@ impl Tree {
                 }
             }
             NodeType::NonTerminal(v) => match &v.node {
-                NonTerminalNode::Array(array) => array.get(0).cloned(),
+                NonTerminalNode::Array(array) => array.first().cloned(),
                 NonTerminalNode::Object(obj) => {
-                    let (_, k) = obj.get(0).unwrap();
+                    let (_, k) = obj.first().unwrap();
                     Some(k).copied()
                 }
             },
@@ -238,20 +230,17 @@ impl Tree {
         let current_node = self.key_to_node(self.current_node);
 
         let next_key = {
-            let previous_key = current_node
-                .parent
-                .map(|k| {
-                    let node = self.slot_map.get(k);
-                    match node {
-                        None => None,
-                        Some(n) => match &n.node {
-                            NodeType::NonTerminal(_) if !n.is_visible() => Some(k),
-                            NodeType::NonTerminal(v) => v.node.find_previous_key(self.current_node),
-                            NodeType::Terminal(_) => unreachable!(),
-                        },
-                    }
-                })
-                .flatten();
+            let previous_key = current_node.parent.and_then(|k| {
+                let node = self.slot_map.get(k);
+                match node {
+                    None => None,
+                    Some(n) => match &n.node {
+                        NodeType::NonTerminal(_) if !n.is_visible() => Some(k),
+                        NodeType::NonTerminal(v) => v.node.find_previous_key(self.current_node),
+                        NodeType::Terminal(_) => unreachable!(),
+                    },
+                }
+            });
 
             let mut previous_key = previous_key;
 
@@ -291,7 +280,6 @@ impl Tree {
             root: root_key,
             slot_map,
             current_node: root_key,
-            current_line: 0,
         };
 
         ret.highlight_current_node();
@@ -328,11 +316,15 @@ impl Tree {
 
         match self.find_line_recursive(&mut line_counter, self.root) {
             None => line_counter,
-            Some(n) => n
+            Some(n) => n,
         }
     }
 
-    fn find_line_recursive(&self, line_counter: &mut usize, current_node: DefaultKey) -> Option<usize> {
+    fn find_line_recursive(
+        &self,
+        line_counter: &mut usize,
+        current_node: DefaultKey,
+    ) -> Option<usize> {
         if current_node == self.current_node {
             return Some(*line_counter);
         }
@@ -372,7 +364,7 @@ impl Tree {
 
                     *line_counter += 1;
                 }
-            }
+            },
         }
 
         None
@@ -390,7 +382,7 @@ impl Tree {
                 _ => unreachable!(),
             },
             NodeType::NonTerminal(v) => {
-                let ret = if v.is_visible() {
+                if v.is_visible() {
                     match &v.node {
                         NonTerminalNode::Array(array) => {
                             let mut ret = Text::raw("[\n");
@@ -434,19 +426,15 @@ impl Tree {
                             ret
                         }
                     }
+                } else if v.is_array() {
+                    Text::raw("[...]")
                 } else {
-                    if v.is_array() {
-                        Text::raw("[...]")
-                    } else {
-                        Text::raw("{...}")
-                    }
-                };
-
-                ret
+                    Text::raw("{...}")
+                }
             }
         };
 
-        let ret = if node.highlighted {
+        if node.highlighted {
             ret.lines
                 .into_iter()
                 .map(|l| {
@@ -460,9 +448,7 @@ impl Tree {
                 .into()
         } else {
             ret
-        };
-
-        ret
+        }
     }
 }
 
