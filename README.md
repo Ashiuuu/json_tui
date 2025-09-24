@@ -5,3 +5,9 @@ This is a simple and dirty tool to view Json files. It can:
 - Fold any object or array contained in the file
 - Highlight current line and scroll the view accordingly
 - [TODO] Search for some text in the file
+
+Mappings:
+- `<Up>` and `<Down>` to navigate
+- `h` to toggle highlighting
+- `<Enter>` to collapse/expand currently highlighted object
+- `q` to quit
